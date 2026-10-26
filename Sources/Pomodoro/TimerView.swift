@@ -51,7 +51,7 @@ struct TimerView: View {
                     Stepper("Long break every \(store.longBreakEvery) focus sessions",
                             value: $store.longBreakEvery, in: 1...12)
                 }.disabled(!store.canEditSettings)
-                Toggle("Clock tick", isOn: $store.tickEnabled)
+                Toggle("Focus clock tick", isOn: $store.tickEnabled)
                 Button("Reset cycle count") { store.resetCycle() }
                     .disabled(store.engine.isRunning)
                 Text("Reset cycle count also returns to focus.")

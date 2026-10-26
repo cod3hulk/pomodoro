@@ -17,7 +17,7 @@ The app appears in the menu bar without a Dock icon. Use **Quit** in its popover
 ## How it works
 
 - Defaults: 25-minute focus, 5-minute short break, 15-minute long break after four completed focus sessions. Change durations and the long-break interval in **Settings**; preferences are stored locally.
-- An optional clock tick plays during active focus and break timers. One tick also plays at phase completion.
+- An optional clock tick plays only during active focus timers. Short and long breaks are silent while counting down. One tick still plays at phase completion.
 - When a phase ends, a full-screen reminder asks you to start the next phase. **Nothing starts automatically.** Choose **Start break** or **Start focus** to begin; **Later** closes the reminder while keeping the next phase ready in the menu bar.
 - Pause and Reset are available from the popover. **Reset cycle count** returns to focus.
 - Time is based on a deadline, so a completed phase is detected when the app resumes after sleep.

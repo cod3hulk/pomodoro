@@ -110,7 +110,7 @@ final class TimerStore: ObservableObject {
             sound.play()
         } else if engine.isRunning {
             let newSecond = Int(ceil(remaining))
-            if let oldSecond, newSecond < oldSecond, tickEnabled,
+            if let oldSecond, newSecond < oldSecond, tickEnabled, engine.phase == .focus,
                newSecond > 0, oldSecond - newSecond == 1 { sound.play() }
             lastTickSecond = newSecond
         }
