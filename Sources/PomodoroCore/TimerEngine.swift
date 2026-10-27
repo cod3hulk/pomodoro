@@ -42,9 +42,12 @@ public struct TimerEngine: Sendable {
     public var settings: TimerSettings
     private var deadline: Date?
     private var pausedRemaining: TimeInterval?
+    private var quickDuration: TimeInterval?
 
     public init(settings: TimerSettings = .init()) { self.settings = settings }
     public var isRunning: Bool { deadline != nil }
+    /// True while a one-off focus session with a custom duration is running or paused.
+    public var isQuickSession: Bool { quickDuration != nil }
 
     public func remaining(at now: Date = .now) -> TimeInterval {
         if let deadline { return max(0, deadline.timeIntervalSince(now)) }
@@ -55,6 +58,16 @@ public struct TimerEngine: Sendable {
         guard deadline == nil, nextPhase == nil else { return }
         deadline = now.addingTimeInterval(pausedRemaining ?? settings.duration(for: phase))
         pausedRemaining = nil
+    }
+
+    /// Starts a one-off focus session of `duration` seconds. Only valid while idle
+    /// in focus. It leaves `settings` untouched and does not count toward the
+    /// long-break cycle.
+    public mutating func startFocus(duration: TimeInterval, at now: Date = .now) {
+        guard duration > 0, phase == .focus, deadline == nil,
+              pausedRemaining == nil, nextPhase == nil else { return }
+        quickDuration = duration
+        deadline = now.addingTimeInterval(duration)
     }
 
     public mutating func pause(at now: Date = .now) {
@@ -68,8 +81,13 @@ public struct TimerEngine: Sendable {
         self.deadline = nil
         pausedRemaining = nil
         if phase == .focus {
-            completedFocusSessions += 1
-            nextPhase = completedFocusSessions % settings.longBreakEvery == 0 ? .longBreak : .shortBreak
+            if quickDuration != nil {
+                nextPhase = .shortBreak
+            } else {
+                completedFocusSessions += 1
+                nextPhase = completedFocusSessions % settings.longBreakEvery == 0 ? .longBreak : .shortBreak
+            }
+            quickDuration = nil
         } else {
             nextPhase = .focus
         }
@@ -84,10 +102,17 @@ public struct TimerEngine: Sendable {
         start(at: now)
     }
 
+    /// Declines a pending break and returns to idle focus without starting a timer.
+    public mutating func skipPendingBreak() {
+        guard let nextPhase, nextPhase != .focus else { return }
+        self.nextPhase = nil
+    }
+
     public mutating func reset() {
         deadline = nil
         pausedRemaining = nil
         nextPhase = nil
+        quickDuration = nil
     }
 
     public mutating func resetCycle() {

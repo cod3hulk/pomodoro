@@ -53,4 +53,142 @@ final class TimerEngineTests: XCTestCase {
         XCTAssertNil(timer.nextPhase)
         XCTAssertFalse(timer.isRunning)
     }
+
+    // MARK: Quick focus
+
+    private func makeTimer() -> TimerEngine {
+        TimerEngine(settings: .init(focus: 100, shortBreak: 20, longBreak: 30, longBreakEvery: 2))
+    }
+
+    func testQuickFocusUsesOverrideAndLeavesConfiguredFocusUnchanged() {
+        var timer = makeTimer()
+        let start = Date(timeIntervalSince1970: 1_000)
+        timer.startFocus(duration: 40, at: start)
+        XCTAssertTrue(timer.isRunning)
+        XCTAssertTrue(timer.isQuickSession)
+        XCTAssertEqual(timer.remaining(at: start), 40)
+        XCTAssertEqual(timer.settings.focus, 100)
+        timer.advance(to: start.addingTimeInterval(40))
+        XCTAssertFalse(timer.isRunning)
+        XCTAssertFalse(timer.isQuickSession)
+        XCTAssertEqual(timer.remaining(at: start.addingTimeInterval(41)), 100)
+    }
+
+    func testQuickFocusDoesNotCountTowardLongBreakAndAlwaysGivesShortBreak() {
+        var timer = makeTimer()
+        let start = Date(timeIntervalSince1970: 1_000)
+        timer.startFocus(duration: 10, at: start)
+        timer.advance(to: start.addingTimeInterval(10))
+        XCTAssertEqual(timer.completedFocusSessions, 0)
+        XCTAssertEqual(timer.nextPhase, .shortBreak)
+        // Two quick sessions in a row (break skipped) must not earn the long break.
+        timer.skipPendingBreak()
+        timer.startFocus(duration: 10, at: start.addingTimeInterval(11))
+        timer.advance(to: start.addingTimeInterval(21))
+        XCTAssertEqual(timer.completedFocusSessions, 0)
+        XCTAssertEqual(timer.nextPhase, .shortBreak)
+    }
+
+    func testFullSessionAfterQuickSessionCountsNormally() {
+        var timer = makeTimer()
+        let start = Date(timeIntervalSince1970: 1_000)
+        timer.startFocus(duration: 10, at: start)
+        timer.advance(to: start.addingTimeInterval(10))
+        timer.confirmNextPhase(at: start.addingTimeInterval(10))
+        timer.advance(to: start.addingTimeInterval(30))
+        timer.confirmNextPhase(at: start.addingTimeInterval(30))
+        XCTAssertEqual(timer.phase, .focus)
+        XCTAssertFalse(timer.isQuickSession)
+        timer.advance(to: start.addingTimeInterval(130))
+        XCTAssertEqual(timer.completedFocusSessions, 1)
+    }
+
+    func testQuickFocusSurvivesPauseAndResume() {
+        var timer = makeTimer()
+        let start = Date(timeIntervalSince1970: 1_000)
+        timer.startFocus(duration: 40, at: start)
+        timer.pause(at: start.addingTimeInterval(15))
+        XCTAssertTrue(timer.isQuickSession)
+        XCTAssertEqual(timer.remaining(at: start.addingTimeInterval(500)), 25)
+        timer.start(at: start.addingTimeInterval(500))
+        timer.advance(to: start.addingTimeInterval(525))
+        XCTAssertEqual(timer.nextPhase, .shortBreak)
+        XCTAssertEqual(timer.completedFocusSessions, 0)
+    }
+
+    func testResetClearsQuickSession() {
+        var timer = makeTimer()
+        let start = Date(timeIntervalSince1970: 1_000)
+        timer.startFocus(duration: 40, at: start)
+        timer.pause(at: start.addingTimeInterval(5))
+        timer.reset()
+        XCTAssertFalse(timer.isQuickSession)
+        XCTAssertEqual(timer.remaining(at: start.addingTimeInterval(6)), 100)
+    }
+
+    func testQuickFocusIsRejectedWhenNotIdleInFocus() {
+        let start = Date(timeIntervalSince1970: 1_000)
+
+        var running = makeTimer()
+        running.start(at: start)
+        running.startFocus(duration: 10, at: start)
+        XCTAssertFalse(running.isQuickSession)
+        XCTAssertEqual(running.remaining(at: start), 100)
+
+        var paused = makeTimer()
+        paused.start(at: start)
+        paused.pause(at: start.addingTimeInterval(10))
+        paused.startFocus(duration: 10, at: start.addingTimeInterval(10))
+        XCTAssertFalse(paused.isQuickSession)
+        XCTAssertFalse(paused.isRunning)
+
+        var pending = makeTimer()
+        pending.start(at: start)
+        pending.advance(to: start.addingTimeInterval(100))
+        pending.startFocus(duration: 10, at: start.addingTimeInterval(101))
+        XCTAssertFalse(pending.isQuickSession)
+        XCTAssertFalse(pending.isRunning)
+
+        var inBreak = makeTimer()
+        inBreak.start(at: start)
+        inBreak.advance(to: start.addingTimeInterval(100))
+        inBreak.confirmNextPhase(at: start.addingTimeInterval(100))
+        inBreak.startFocus(duration: 10, at: start.addingTimeInterval(101))
+        XCTAssertFalse(inBreak.isQuickSession)
+        XCTAssertEqual(inBreak.phase, .shortBreak)
+    }
+
+    func testQuickFocusRejectsNonPositiveDuration() {
+        var timer = makeTimer()
+        timer.startFocus(duration: 0, at: Date(timeIntervalSince1970: 1_000))
+        XCTAssertFalse(timer.isRunning)
+        XCTAssertFalse(timer.isQuickSession)
+    }
+
+    // MARK: Skip break
+
+    func testSkipPendingBreakReturnsToIdleFocusWithoutStartingTimer() {
+        var timer = makeTimer()
+        let start = Date(timeIntervalSince1970: 1_000)
+        timer.startFocus(duration: 10, at: start)
+        timer.advance(to: start.addingTimeInterval(10))
+        XCTAssertEqual(timer.nextPhase, .shortBreak)
+        timer.skipPendingBreak()
+        XCTAssertNil(timer.nextPhase)
+        XCTAssertEqual(timer.phase, .focus)
+        XCTAssertFalse(timer.isRunning)
+        XCTAssertEqual(timer.remaining(at: start.addingTimeInterval(11)), 100)
+    }
+
+    func testSkipPendingBreakIgnoresPendingFocus() {
+        var timer = makeTimer()
+        let start = Date(timeIntervalSince1970: 1_000)
+        timer.start(at: start)
+        timer.advance(to: start.addingTimeInterval(100))
+        timer.confirmNextPhase(at: start.addingTimeInterval(100))
+        timer.advance(to: start.addingTimeInterval(120))
+        XCTAssertEqual(timer.nextPhase, .focus)
+        timer.skipPendingBreak()
+        XCTAssertEqual(timer.nextPhase, .focus)
+    }
 }

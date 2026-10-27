@@ -5,7 +5,18 @@ import Foundation
 final class TickSound {
     private var player: AVAudioPlayer?
 
+    /// Playback volume, 0...1. Applies to the countdown tick and the completion sound.
+    var volume: Float = 1 { didSet { player?.volume = volume } }
+
     init() {
+        // Prefer the bundled recording (Contents/Resources/tick.wav); fall back to a
+        // synthesized tick, e.g. under `swift run` where there is no app bundle.
+        if let url = Bundle.main.url(forResource: "tick", withExtension: "wav"),
+           let bundled = try? AVAudioPlayer(contentsOf: url) {
+            player = bundled
+            player?.prepareToPlay()
+            return
+        }
         let rate = 22_050
         let count = rate / 40
         var data = Data()

@@ -5,11 +5,21 @@ import SwiftUI
 struct TimerView: View {
     @ObservedObject var store: TimerStore
     @State private var showSettings = false
+    @State private var customMinutes = 20
+    @State private var showCustom = false
+
+    private var canQuickStart: Bool {
+        store.engine.phase == .focus && !store.engine.isRunning &&
+            store.engine.nextPhase == nil && !store.engine.isQuickSession &&
+            store.remaining == store.engine.settings.duration(for: .focus)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text(store.engine.phase.title.uppercased())
+                Text(store.engine.isQuickSession
+                     ? "\(store.engine.phase.title.uppercased()) · QUICK"
+                     : store.engine.phase.title.uppercased())
                     .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 Spacer()
                 Text("Session \(store.engine.completedFocusSessions + 1)")
@@ -24,13 +34,34 @@ struct TimerView: View {
                 Button("Start \(next.title)") { store.confirmNextPhase() }
                     .buttonStyle(.borderedProminent).controlSize(.large)
                     .frame(maxWidth: .infinity)
+                if next != .focus {
+                    Button("Skip break") { store.skipBreak() }
+                        .buttonStyle(.plain).foregroundStyle(.secondary).font(.caption)
+                        .frame(maxWidth: .infinity)
+                }
             } else {
                 HStack {
                     Button(store.engine.isRunning ? "Pause" : "Start") { store.toggle() }
                         .buttonStyle(.borderedProminent)
+                    if canQuickStart {
+                        Menu("Quick") {
+                            Button("10 min") { store.startQuickFocus(minutes: 10) }
+                            Button("15 min") { store.startQuickFocus(minutes: 15) }
+                            Button("20 min") { store.startQuickFocus(minutes: 20) }
+                            Divider()
+                            Button("Custom…") { showCustom.toggle() }
+                        }.fixedSize()
+                    }
                     Button("Reset") { store.reset() }
                         .disabled(!store.engine.isRunning && store.remaining == store.engine.settings.duration(for: store.engine.phase))
                 }.controlSize(.large).frame(maxWidth: .infinity)
+                if showCustom && canQuickStart {
+                    HStack {
+                        Stepper("Quick focus: \(customMinutes) min", value: $customMinutes, in: 1...60)
+                        Button("Go") { showCustom = false; store.startQuickFocus(minutes: customMinutes) }
+                            .buttonStyle(.borderedProminent)
+                    }.font(.callout)
+                }
             }
             Divider()
             HStack {
@@ -52,6 +83,14 @@ struct TimerView: View {
                             value: $store.longBreakEvery, in: 1...12)
                 }.disabled(!store.canEditSettings)
                 Toggle("Focus clock tick", isOn: $store.tickEnabled)
+                HStack {
+                    Image(systemName: "speaker.fill").foregroundStyle(.secondary)
+                    Slider(value: $store.tickVolume, in: 0...1) { editing in
+                        if !editing { store.playTickPreview() }
+                    }
+                    Image(systemName: "speaker.wave.3.fill").foregroundStyle(.secondary)
+                }
+                .accessibilityLabel("Tick volume")
                 Button("Reset cycle count") { store.resetCycle() }
                     .disabled(store.engine.isRunning)
                 Text("Reset cycle count also returns to focus.")

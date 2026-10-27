@@ -20,6 +20,7 @@ This is a native macOS menu-bar Pomodoro app. Keep it small, local-only, and dep
 ## Behavior contracts
 
 - A completed phase must leave `nextPhase` pending. Closing the overlay with **Later** must not start the next timer; only explicit confirmation does.
+- Quick focus (`startFocus(duration:)`) is valid only while idle in focus, never changes `settings`, is cleared on reset/completion, does not increment `completedFocusSessions`, and is always followed by a short break. `skipPendingBreak()` clears a pending break only, never a pending focus.
 - Long breaks follow the configured number of completed focus sessions. A paused session does not increment the count.
 - Compute time remaining from an absolute deadline, not from the number of timer callbacks. Reconcile completion after the machine wakes.
 - Keep the pending action reachable from the menu-bar popover even if the full-screen window is dismissed.

@@ -8,6 +8,14 @@ import SwiftUI
 final class TimerStore: ObservableObject {
     @Published private(set) var engine: TimerEngine
     @Published var tickEnabled: Bool { didSet { UserDefaults.standard.set(tickEnabled, forKey: "tickEnabled") } }
+    @Published var tickVolume: Double {
+        didSet {
+            let clamped = min(1, max(0, tickVolume))
+            if clamped != tickVolume { tickVolume = clamped; return }
+            UserDefaults.standard.set(tickVolume, forKey: "tickVolume")
+            sound.volume = Float(tickVolume)
+        }
+    }
     @Published var focusMinutes: Int { didSet { updateSettings() } }
     @Published var shortMinutes: Int { didSet { updateSettings() } }
     @Published var longMinutes: Int { didSet { updateSettings() } }
@@ -30,9 +38,11 @@ final class TimerStore: ObservableObject {
         longMinutes = long
         longBreakEvery = every
         tickEnabled = defaults.object(forKey: "tickEnabled") as? Bool ?? true
+        tickVolume = min(1, max(0, defaults.object(forKey: "tickVolume") as? Double ?? 1))
         engine = TimerEngine(settings: TimerSettings(focus: Double(focus * 60),
             shortBreak: Double(short * 60), longBreak: Double(long * 60),
             longBreakEvery: every))
+        sound.volume = Float(tickVolume)
         timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }
@@ -55,6 +65,23 @@ final class TimerStore: ObservableObject {
         else { engine.start(at: .now) }
         now = .now
         lastTickSecond = Int(ceil(remaining))
+        objectWillChange.send()
+    }
+
+    func startQuickFocus(minutes: Int) {
+        engine.startFocus(duration: Double(minutes * 60), at: .now)
+        now = .now
+        lastTickSecond = Int(ceil(remaining))
+        objectWillChange.send()
+    }
+
+    func playTickPreview() { sound.play() }
+
+    func skipBreak() {
+        engine.skipPendingBreak()
+        closeOverlay()
+        now = .now
+        lastTickSecond = nil
         objectWillChange.send()
     }
 
