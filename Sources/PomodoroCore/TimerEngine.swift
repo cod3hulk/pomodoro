@@ -54,6 +54,15 @@ public struct TimerEngine: Sendable {
         return pausedRemaining ?? settings.duration(for: phase)
     }
 
+    /// Only a fresh/reset timer can change phase; paused or pending sessions are protected.
+    public var isIdle: Bool { deadline == nil && pausedRemaining == nil && nextPhase == nil }
+
+    /// Selects a session without starting it or changing cycle progress.
+    public mutating func selectPhase(_ phase: Phase) {
+        guard isIdle else { return }
+        self.phase = phase
+    }
+
     public mutating func start(at now: Date = .now) {
         guard deadline == nil, nextPhase == nil else { return }
         deadline = now.addingTimeInterval(pausedRemaining ?? settings.duration(for: phase))

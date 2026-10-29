@@ -54,6 +54,52 @@ final class TimerEngineTests: XCTestCase {
         XCTAssertFalse(timer.isRunning)
     }
 
+    func testSelectPhasePreparesBreakWithoutStartingOrCountingFocus() {
+        var timer = TimerEngine(settings: .init(focus: 100, shortBreak: 20, longBreak: 30))
+        let start = Date(timeIntervalSince1970: 1_000)
+        for phase in [Phase.shortBreak, .longBreak, .focus] {
+            timer.selectPhase(phase)
+            XCTAssertEqual(timer.phase, phase)
+            XCTAssertFalse(timer.isRunning)
+            XCTAssertNil(timer.nextPhase)
+            XCTAssertEqual(timer.remaining(at: start), timer.settings.duration(for: phase))
+            XCTAssertEqual(timer.completedFocusSessions, 0)
+        }
+        timer.selectPhase(.shortBreak)
+        timer.start(at: start)
+        timer.advance(to: start.addingTimeInterval(20))
+        XCTAssertEqual(timer.nextPhase, .focus)
+        XCTAssertEqual(timer.completedFocusSessions, 0)
+    }
+
+    func testPhaseSelectionProtectsRunningPausedAndPendingSessions() {
+        let start = Date(timeIntervalSince1970: 1_000)
+        for quick in [false, true] {
+            var timer = makeTimer()
+            if quick { timer.startFocus(duration: 40, at: start) }
+            else { timer.start(at: start) }
+            XCTAssertFalse(timer.isIdle)
+            timer.selectPhase(.longBreak)
+            XCTAssertEqual(timer.phase, .focus)
+            timer.pause(at: start) // Even a paused timer with its full duration isn't idle.
+            XCTAssertFalse(timer.isIdle)
+            timer.selectPhase(.shortBreak)
+            XCTAssertEqual(timer.phase, .focus)
+            XCTAssertEqual(timer.isQuickSession, quick)
+            timer.start(at: start)
+            timer.advance(to: start.addingTimeInterval(100))
+            XCTAssertFalse(timer.isIdle)
+            timer.selectPhase(.longBreak)
+            XCTAssertEqual(timer.nextPhase, .shortBreak)
+            timer.reset()
+            XCTAssertTrue(timer.isIdle)
+            timer.selectPhase(.longBreak)
+            XCTAssertEqual(timer.phase, .longBreak)
+            XCTAssertFalse(timer.isQuickSession)
+            XCTAssertEqual(timer.completedFocusSessions, quick ? 0 : 1)
+        }
+    }
+
     // MARK: Quick focus
 
     private func makeTimer() -> TimerEngine {

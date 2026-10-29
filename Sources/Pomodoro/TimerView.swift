@@ -9,9 +9,7 @@ struct TimerView: View {
     @State private var showCustom = false
 
     private var canQuickStart: Bool {
-        store.engine.phase == .focus && !store.engine.isRunning &&
-            store.engine.nextPhase == nil && !store.engine.isQuickSession &&
-            store.remaining == store.engine.settings.duration(for: .focus)
+        store.engine.phase == .focus && store.engine.isIdle
     }
 
     var body: some View {
@@ -25,6 +23,16 @@ struct TimerView: View {
                 Text("Session \(store.engine.completedFocusSessions + 1)")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Picker("Session type", selection: Binding(
+                get: { store.engine.phase },
+                set: { store.selectPhase($0); showCustom = false }
+            )) {
+                Text("Focus").tag(Phase.focus)
+                Text("Short break").tag(Phase.shortBreak)
+                Text("Long break").tag(Phase.longBreak)
+            }
+            .pickerStyle(.segmented)
+            .disabled(!store.engine.isIdle)
             Text(store.timeLabel).font(.system(size: 56, weight: .light, design: .rounded))
                 .monospacedDigit().frame(maxWidth: .infinity)
                 .accessibilityLabel("\(store.timeLabel) remaining")
@@ -39,6 +47,9 @@ struct TimerView: View {
                         .buttonStyle(.plain).foregroundStyle(.secondary).font(.caption)
                         .frame(maxWidth: .infinity)
                 }
+                Button("Reset") { store.reset() }
+                    .buttonStyle(.plain).foregroundStyle(.secondary).font(.caption)
+                    .help("Discard the pending transition to choose another session")
             } else {
                 HStack {
                     Button(store.engine.isRunning ? "Pause" : "Start") { store.toggle() }
@@ -53,7 +64,7 @@ struct TimerView: View {
                         }.fixedSize()
                     }
                     Button("Reset") { store.reset() }
-                        .disabled(!store.engine.isRunning && store.remaining == store.engine.settings.duration(for: store.engine.phase))
+                        .disabled(store.engine.isIdle)
                 }.controlSize(.large).frame(maxWidth: .infinity)
                 if showCustom && canQuickStart {
                     HStack {

@@ -49,8 +49,7 @@ final class TimerStore: ObservableObject {
     }
 
     var remaining: TimeInterval { engine.remaining(at: now) }
-    var canEditSettings: Bool { !engine.isRunning && engine.nextPhase == nil &&
-        remaining == engine.settings.duration(for: engine.phase) }
+    var canEditSettings: Bool { engine.isIdle }
     var timeLabel: String {
         let seconds = Int(ceil(remaining))
         return String(format: "%02d:%02d", seconds / 60, seconds % 60)
@@ -58,6 +57,12 @@ final class TimerStore: ObservableObject {
     var menuBarTitle: String {
         if let next = engine.nextPhase { return "◉ \(next.title)" }
         return "\(engine.isRunning ? "●" : "◯") \(timeLabel)"
+    }
+
+    func selectPhase(_ phase: Phase) {
+        engine.selectPhase(phase)
+        now = .now
+        lastTickSecond = nil
     }
 
     func toggle() {
