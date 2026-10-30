@@ -5,41 +5,57 @@ import SwiftUI
 struct TimerView: View {
     @ObservedObject var store: TimerStore
     @State private var showSettings = false
-    @State private var customMinutes = 20
-    @State private var showCustom = false
-
-    private var canQuickStart: Bool {
-        store.engine.phase == .focus && store.engine.isIdle
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Text(store.engine.isQuickSession
-                     ? "\(store.engine.phase.title.uppercased()) · QUICK"
-                     : store.engine.phase.title.uppercased())
+                     ? "FOCUS · QUICK"
+                     : (store.sessionPhase == .focus ? "FOCUS" : "BREAK"))
                     .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 Spacer()
                 Text("Session \(store.engine.completedFocusSessions + 1)")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Picker("Session type", selection: Binding(
-                get: { store.engine.phase },
-                set: { store.selectPhase($0); showCustom = false }
+                get: { store.sessionPhase == .focus },
+                set: { store.selectMode(focus: $0) }
             )) {
-                Text("Focus").tag(Phase.focus)
-                Text("Short break").tag(Phase.shortBreak)
-                Text("Long break").tag(Phase.longBreak)
+                Text("Focus").tag(true)
+                Text("Break").tag(false)
             }
             .pickerStyle(.segmented)
             .disabled(!store.engine.isIdle)
-            Text(store.timeLabel).font(.system(size: 56, weight: .light, design: .rounded))
-                .monospacedDigit().frame(maxWidth: .infinity)
-                .accessibilityLabel("\(store.timeLabel) remaining")
+            if store.canEditDuration {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    TextField("Minutes", text: $store.durationText)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 48, weight: .light, design: .rounded))
+                        .monospacedDigit().multilineTextAlignment(.center)
+                        .accessibilityLabel("Session duration in minutes")
+                        .onSubmit {
+                            if store.engine.nextPhase != nil { store.confirmNextPhase() }
+                            else { store.toggle() }
+                        }
+                    Text("min").foregroundStyle(.secondary)
+                }
+                if store.durationSeconds == nil {
+                    Text("Enter a whole number from 1 to 180 minutes.")
+                        .font(.caption).foregroundStyle(.red)
+                } else {
+                    Text("This session only · default \(Int(store.engine.settings.duration(for: store.sessionPhase) / 60)) min")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            } else {
+                Text(store.timeLabel).font(.system(size: 56, weight: .light, design: .rounded))
+                    .monospacedDigit().frame(maxWidth: .infinity)
+                    .accessibilityLabel("\(store.timeLabel) remaining")
+            }
             if let next = store.engine.nextPhase {
                 Text("\(store.engine.phase.title) complete. Ready for \(next.title.lowercased())?")
                     .font(.callout)
-                Button("Start \(next.title)") { store.confirmNextPhase() }
+                Button(next == .focus ? "Start Focus" : "Start Break") { store.confirmNextPhase() }
+                    .disabled(store.durationSeconds == nil)
                     .buttonStyle(.borderedProminent).controlSize(.large)
                     .frame(maxWidth: .infinity)
                 if next != .focus {
@@ -54,25 +70,10 @@ struct TimerView: View {
                 HStack {
                     Button(store.engine.isRunning ? "Pause" : "Start") { store.toggle() }
                         .buttonStyle(.borderedProminent)
-                    if canQuickStart {
-                        Menu("Quick") {
-                            Button("10 min") { store.startQuickFocus(minutes: 10) }
-                            Button("15 min") { store.startQuickFocus(minutes: 15) }
-                            Button("20 min") { store.startQuickFocus(minutes: 20) }
-                            Divider()
-                            Button("Custom…") { showCustom.toggle() }
-                        }.fixedSize()
-                    }
+                        .disabled(store.engine.isIdle && store.durationSeconds == nil)
                     Button("Reset") { store.reset() }
                         .disabled(store.engine.isIdle)
                 }.controlSize(.large).frame(maxWidth: .infinity)
-                if showCustom && canQuickStart {
-                    HStack {
-                        Stepper("Quick focus: \(customMinutes) min", value: $customMinutes, in: 1...60)
-                        Button("Go") { showCustom = false; store.startQuickFocus(minutes: customMinutes) }
-                            .buttonStyle(.borderedProminent)
-                    }.font(.callout)
-                }
             }
             Divider()
             HStack {
@@ -130,7 +131,7 @@ struct TransitionView: View {
                     .font(.title3).foregroundStyle(.secondary)
                 HStack(spacing: 16) {
                     Button("Later", action: later).buttonStyle(.bordered).controlSize(.large)
-                    Button("Start \(phase.title)", action: start)
+                    Button(phase == .focus ? "Start Focus" : "Start Break", action: start)
                         .buttonStyle(.borderedProminent).controlSize(.large)
                 }.padding(.top, 16)
             }

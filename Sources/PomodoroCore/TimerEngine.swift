@@ -57,6 +57,13 @@ public struct TimerEngine: Sendable {
     /// Only a fresh/reset timer can change phase; paused or pending sessions are protected.
     public var isIdle: Bool { deadline == nil && pausedRemaining == nil && nextPhase == nil }
 
+    /// Break length is chosen by the cycle, not by a separate UI mode.
+    public var recommendedBreak: Phase {
+        if let nextPhase, nextPhase != .focus { return nextPhase }
+        return completedFocusSessions > 0 && completedFocusSessions % settings.longBreakEvery == 0
+            ? .longBreak : .shortBreak
+    }
+
     /// Selects a session without starting it or changing cycle progress.
     public mutating func selectPhase(_ phase: Phase) {
         guard isIdle else { return }
@@ -67,6 +74,17 @@ public struct TimerEngine: Sendable {
         guard deadline == nil, nextPhase == nil else { return }
         deadline = now.addingTimeInterval(pausedRemaining ?? settings.duration(for: phase))
         pausedRemaining = nil
+    }
+
+    /// A one-off duration never updates saved settings. Edited focus sessions keep
+    /// the quick-focus policy (no long-break credit); default focus counts normally.
+    public mutating func startSession(duration: TimeInterval, at now: Date = .now) {
+        guard isIdle, duration.isFinite, duration > 0 else { return }
+        if phase == .focus && duration != settings.focus {
+            startFocus(duration: duration, at: now)
+        } else {
+            deadline = now.addingTimeInterval(duration)
+        }
     }
 
     /// Starts a one-off focus session of `duration` seconds. Only valid while idle
@@ -103,12 +121,14 @@ public struct TimerEngine: Sendable {
         return nextPhase
     }
 
-    public mutating func confirmNextPhase(at now: Date = .now) {
+    public mutating func confirmNextPhase(duration: TimeInterval? = nil, at now: Date = .now) {
         guard let nextPhase else { return }
+        let duration = duration ?? settings.duration(for: nextPhase)
+        guard duration.isFinite, duration > 0 else { return }
         phase = nextPhase
         self.nextPhase = nil
         pausedRemaining = nil
-        start(at: now)
+        startSession(duration: duration, at: now)
     }
 
     /// Declines a pending break and returns to idle focus without starting a timer.

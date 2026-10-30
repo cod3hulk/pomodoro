@@ -100,6 +100,59 @@ final class TimerEngineTests: XCTestCase {
         }
     }
 
+    func testBreakChoiceUsesCycleDefault() {
+        var timer = makeTimer()
+        let start = Date(timeIntervalSince1970: 1_000)
+        XCTAssertEqual(timer.recommendedBreak, .shortBreak)
+        timer.start(at: start)
+        timer.advance(to: start.addingTimeInterval(100))
+        XCTAssertEqual(timer.recommendedBreak, .shortBreak)
+        timer.skipPendingBreak()
+        timer.start(at: start)
+        timer.advance(to: start.addingTimeInterval(100))
+        XCTAssertEqual(timer.recommendedBreak, .longBreak)
+        timer.reset()
+        XCTAssertEqual(timer.recommendedBreak, .longBreak)
+        timer.selectPhase(timer.recommendedBreak)
+        XCTAssertEqual(timer.remaining(at: start), 30)
+    }
+
+    func testOneOffBreakDurationPreservesSettingsAndPauseResume() {
+        var timer = makeTimer()
+        let start = Date(timeIntervalSince1970: 1_000)
+        timer.selectPhase(.shortBreak)
+        timer.startSession(duration: 12, at: start)
+        XCTAssertEqual(timer.remaining(at: start), 12)
+        XCTAssertEqual(timer.settings.shortBreak, 20)
+        timer.pause(at: start.addingTimeInterval(4))
+        timer.start(at: start.addingTimeInterval(100))
+        XCTAssertEqual(timer.remaining(at: start.addingTimeInterval(100)), 8)
+        timer.advance(to: start.addingTimeInterval(108))
+        XCTAssertEqual(timer.nextPhase, .focus)
+        XCTAssertEqual(timer.completedFocusSessions, 0)
+        timer.reset()
+        XCTAssertEqual(timer.remaining(at: start), 20)
+    }
+
+    func testPendingLongBreakAcceptsOneOffDurationAndRejectsInvalidInput() {
+        var timer = TimerEngine(settings: .init(focus: 100, shortBreak: 20, longBreak: 30, longBreakEvery: 1))
+        let start = Date(timeIntervalSince1970: 1_000)
+        timer.start(at: start)
+        timer.advance(to: start.addingTimeInterval(100))
+        for invalid in [0.0, -1, Double.infinity, Double.nan] {
+            timer.confirmNextPhase(duration: invalid, at: start)
+            XCTAssertEqual(timer.nextPhase, .longBreak)
+            XCTAssertFalse(timer.isRunning)
+        }
+        timer.confirmNextPhase(duration: 45, at: start)
+        XCTAssertEqual(timer.phase, .longBreak)
+        XCTAssertEqual(timer.remaining(at: start), 45)
+        XCTAssertEqual(timer.settings.longBreak, 30)
+        timer.advance(to: start.addingTimeInterval(45))
+        XCTAssertEqual(timer.nextPhase, .focus)
+        XCTAssertEqual(timer.completedFocusSessions, 1)
+    }
+
     // MARK: Quick focus
 
     private func makeTimer() -> TimerEngine {
