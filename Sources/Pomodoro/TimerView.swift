@@ -17,14 +17,14 @@ struct TimerView: View {
                 Text("Session \(store.engine.completedFocusSessions + 1)")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Picker("Session type", selection: Binding(
-                get: { store.sessionPhase == .focus },
-                set: { store.selectMode(focus: $0) }
-            )) {
-                Text("Focus").tag(true)
-                Text("Break").tag(false)
+            // Avoid the native segmented control's AppKit/SwiftUI sizing path
+            // observed saturating the main thread in a long-lived MenuBarExtra.
+            HStack(spacing: 4) {
+                modeButton("Focus", focus: true)
+                modeButton("Break", focus: false)
             }
-            .pickerStyle(.segmented)
+            .padding(3)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 9))
             .disabled(!store.engine.isIdle)
             if store.canEditDuration {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -111,6 +111,21 @@ struct TimerView: View {
         }
         .padding(20)
         .frame(width: 310)
+    }
+
+    private func modeButton(_ title: String, focus: Bool) -> some View {
+        let selected = (store.sessionPhase == .focus) == focus
+        return Button { store.selectMode(focus: focus) } label: {
+            Text(title)
+                .font(.subheadline.weight(selected ? .semibold : .regular))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 5)
+                .background(selected ? Color.primary.opacity(0.12) : Color.clear,
+                            in: RoundedRectangle(cornerRadius: 6))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
